@@ -8,6 +8,8 @@ from threading import Thread
 import pandas as pd
 import websockets
 
+from config import c
+
 TYPE_LIST = ['execResList', 'execResQueryId', 'execResult']
 
 
@@ -44,10 +46,12 @@ class LongWS:
 
     async def _exec_sql(self, sql, db):
         if self.status == WsStatus.WAITING:
-            print("execute waiting...")
+            if c.debug:
+                print("execute waiting...")
             return
         if self.status == WsStatus.FETCHED:
-            print("data not fetched...")
+            if c.debug:
+                print("data not fetched...")
             return
         if sql is None or db is None:
             return
@@ -62,13 +66,15 @@ class LongWS:
         await self.ws.send(json.dumps(req))
 
     async def _on_open(self):
-        print("Connection opened")
+        if c.debug:
+            print("Connection opened")
         if self.sql is None or self.db is None:
             return
         await self._exec_sql(self.sql, self.db)
 
     async def _on_close(self, reason):
-        print("Connection closed", reason)
+        if c.debug:
+            print("Connection closed", reason)
 
     async def _connect(self):
         # mac: depend on Python version
@@ -100,7 +106,8 @@ class LongWS:
                 async for message in websocket:
                     msg = json.loads(message)
                     m_type = msg['type']
-                    print(f"Received: {message}")
+                    if c.debug:
+                        print(f"Received: {message}")
                     # 根据收到的消息做出响应...
                     if m_type == TYPE_LIST[2]:
                         self.data = msg
