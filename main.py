@@ -44,7 +44,7 @@ def new_ws_data():
     exec_sql = str(resp_data["resultSet"]["orderLink"]["orderLinkData"]["exeSQL"])
     cnt = int(resp_data["resultSet"]["count"])
 
-    if exec_sql.startswith("SELECT") and limit_num <= cnt and False: # 未通过
+    if exec_sql.startswith("SELECT") and limit_num <= cnt and False: # 未通过，每日查询次数可能就100次
         max_row = int(resp_data["resultSet"]["maxRow"])
         page = 2
         others = list()
