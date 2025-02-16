@@ -23,11 +23,11 @@ def parse_data(ws_data):
 
 @st.cache_data
 def new_ws_data():
-    if db_id is None:
+    if db_id is None or db_id == '':
         return
-    if cookie is None:
+    if cookie is None or cookie == '':
         return
-    if sql is None:
+    if sql is None or sql == '':
         return
     lws = LongWS(cookie)
     lws.connect()
@@ -41,12 +41,12 @@ with st.sidebar:
 
 sql = st.text_input("Console:")
 if st.button("Query"):
-    if db_id is None:
-        st.warning("please input db id")
-    if cookie is None:
-        st.warning("please input cookie")
-    if sql is None:
-        st.warning("please input sql")
+    if db_id is None or db_id == "":
+        st.warning("Please input Db id!")
+    if cookie is None or cookie == "":
+        st.warning("Please input cookie!")
+    if sql is None or sql == "":
+        st.warning("Please input sql!")
     new_ws_data.clear()
 
 data = new_ws_data()
