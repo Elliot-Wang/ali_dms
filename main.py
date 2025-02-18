@@ -5,9 +5,13 @@ import streamlit as st
 
 from ws_msg import LongWS
 
-st.title('DMS SQL Console')
+# 全局变量声明
+db_id = None
+cookie = None
+sql = None
+limit_num = None
 
-global db_id, cookie, sql, limit_num
+st.title('DMS SQL Console')
 
 
 def parse_items(ws_data):
@@ -62,7 +66,6 @@ def new_ws_data():
 
 
 with st.sidebar:
-    global db_id, cookie
     db_id = st.text_input("Db:")
     cookie = st.text_input("Cookie:")
     limit_num = st.text_input("Limit:")
