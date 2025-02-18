@@ -1,3 +1,4 @@
+import datetime
 import json
 import time
 import pandas as pd
@@ -41,28 +42,30 @@ def new_ws_data():
     lws.connect()
     start = time.time()
     resp_data = lws.sql_query(sql, db_id)['data']
+    all_data = list()
+    all_data.append(resp_data)
     end = time.time()
     print(f"query cost: {(end - start) * 1000} ms")
 
-    print(json.dumps(resp_data, ensure_ascii=False))
     exec_sql = str(resp_data["resultSet"]["orderLink"]["orderLinkData"]["exeSQL"])
     cnt = int(resp_data["resultSet"]["count"])
 
-    if exec_sql.startswith("SELECT") and limit_num <= cnt and False: # 未通过，每日查询次数可能就100次
+    # 每日查询次数又上限，可能就100次
+    if exec_sql.startswith("SELECT") and limit_num > cnt: 
         max_row = int(resp_data["resultSet"]["maxRow"])
         page = 2
-        others = list()
-        while limit_num <= cnt:
+        while limit_num > cnt:
             start = time.time()
-            other_resp_data = lws.sql_query(sql + f" limit {cnt}, {cnt + max_row}", db_id)['data']
+            req_rows = min(max_row, limit_num - cnt)
+            # print sql
+            print(sql + f" limit {cnt}, {req_rows}")
+            other_resp_data = lws.sql_query(sql + f" limit {cnt}, {req_rows}", db_id)['data']
             end = time.time()
             print(f"query cost: {(end - start) * 1000} ms, page {page}")
             cnt = cnt + int(resp_data["resultSet"]["count"])
             page = page + 1
-            others.append(other_resp_data)
-    else:
-        others = list()
-    return resp_data, others
+            all_data.append(other_resp_data)
+    return all_data
 
 
 with st.sidebar:
@@ -88,11 +91,12 @@ if st.button("Query"):
 
 
 def render_data(r_data):
+    print(f"render_data: {len(r_data)}")
     if len(r_data) < 1:
         return
     if len(r_data) == 1:
         r_data = r_data[0]
-        print(json.dumps(r_data, ensure_ascii=False))
+        # print(json.dumps(r_data, ensure_ascii=False))
         count = r_data["resultSet"]["count"]
         execute_time = r_data["resultSet"]["executeTime"]
         schema_display_name = r_data["resultSet"]["orderLink"]["orderLinkData"]["schemaDisplayName"]
