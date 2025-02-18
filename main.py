@@ -1,5 +1,4 @@
-import datetime
-import json
+import re
 import time
 import pandas as pd
 import streamlit as st
@@ -24,6 +23,51 @@ def parse_items(ws_data):
     result.rename(columns_map, axis='columns', inplace=True)
     return result
 
+class SQL_WARP():
+    def __init__(self, sql, limit_num):
+        self.sql = sql
+        self.page = 1
+        self.limit_num = limit_num
+        self.pageable = sql.lower().startswith("select") and (limit_num > 0 or sql.lower().find("limit") != -1)
+        if self.sql.lower().find("limit") != -1:
+            # parse sql by regex
+            limit_info = re.search(r"limit\s+(\d+),\s+(\d+)", self.sql)
+            limit_info_2 = re.search(r"limit\s+(\d+)", self.sql)
+            if limit_info:
+                self.offset = int(limit_info.group(1))
+                self.limit_num = int(limit_info.group(2))
+                self.sql = self.sql.replace(limit_info.group(0), "")
+            elif limit_info_2:
+                self.offset = 0
+                self.limit_num = int(limit_info_2.group(1))
+                self.sql = self.sql.replace(limit_info_2.group(0), "")
+            else:
+                print(f"parse sql limit error, {self.sql}")
+                self.offset = 0
+        else:
+            self.offset = 0
+        self.cnt = 0
+    
+    def offset_inc(self, inc):
+        self.offset += inc
+        self.cnt += inc
+        self.page += 1
+    
+    def has_more(self):
+        if self.pageable:
+            if self.page > 10 and self.cnt < self.limit_num:
+                print(f"fuse 10次查询, {self.sql}")
+                return False
+            return self.cnt < self.limit_num
+        else:
+            return False
+    
+    def pageable_sql(self, page_size=200):
+        if self.pageable:
+            page_size = min(page_size, self.limit_num - self.cnt)
+            return self.sql + f" limit {self.offset}, {page_size}"
+        else:
+            return self.sql
 
 @st.cache_data
 def ws_client(c):
@@ -40,30 +84,30 @@ def new_ws_data():
         return
     lws = ws_client(cookie)
     lws.connect()
+    sql_warp = SQL_WARP(sql, limit_num)
+
     start = time.time()
-    resp_data = lws.sql_query(sql, db_id)['data']
+    resp_data = lws.sql_query(sql_warp.pageable_sql(), db_id)['data']
+    end = time.time()
+    print(f"query cost: {(end - start) * 1000} ms, {sql_warp.pageable_sql()}")
+
     all_data = list()
     all_data.append(resp_data)
-    end = time.time()
-    print(f"query cost: {(end - start) * 1000} ms")
 
-    exec_sql = str(resp_data["resultSet"]["orderLink"]["orderLinkData"]["exeSQL"])
     cnt = int(resp_data["resultSet"]["count"])
+    sql_warp.offset_inc(cnt)
 
     # 每日查询次数又上限，可能就100次
-    if exec_sql.startswith("SELECT") and limit_num > cnt: 
+    if sql_warp.has_more(): 
         max_row = int(resp_data["resultSet"]["maxRow"])
-        page = 2
-        while limit_num > cnt:
+        while sql_warp.has_more():
             start = time.time()
-            req_rows = min(max_row, limit_num - cnt)
-            # print sql
-            print(sql + f" limit {cnt}, {req_rows}")
-            other_resp_data = lws.sql_query(sql + f" limit {cnt}, {req_rows}", db_id)['data']
+            other_resp_data = lws.sql_query(sql_warp.pageable_sql(max_row), db_id)['data']
             end = time.time()
-            print(f"query cost: {(end - start) * 1000} ms, page {page}")
-            cnt = cnt + int(resp_data["resultSet"]["count"])
-            page = page + 1
+            print(f"query cost: {(end - start) * 1000} ms, {sql_warp.pageable_sql(max_row)}")
+
+            cnt = int(resp_data["resultSet"]["count"])
+            sql_warp.offset_inc(cnt)
             all_data.append(other_resp_data)
     return all_data
 
@@ -75,8 +119,8 @@ with st.sidebar:
     try:
         limit_num = int(limit_num)
     except:
-        limit_num = 200
-    st.text("希望返回的最大条数")
+        limit_num = 0
+    st.text("希望返回的最大条数(SQL中包含limit则不生效)")
 
 sql = st.text_input("Console:")
 st.markdown("> 输入多条SQL，也只能执行第一条指令")
@@ -91,38 +135,22 @@ if st.button("Query"):
 
 
 def render_data(r_data):
-    print(f"render_data: {len(r_data)}")
     if len(r_data) < 1:
         return
-    if len(r_data) == 1:
-        r_data = r_data[0]
-        # print(json.dumps(r_data, ensure_ascii=False))
-        count = r_data["resultSet"]["count"]
-        execute_time = r_data["resultSet"]["executeTime"]
-        schema_display_name = r_data["resultSet"]["orderLink"]["orderLinkData"]["schemaDisplayName"]
-        info = f"一共{count}条数据，执行耗时{execute_time}ms. \n{schema_display_name}"
-        st.text(info)
 
-        columns = r_data['resultSet']['columns']
-        columns_map = dict(map(lambda it: (it['field'], it['realName']), columns))
+    schema_display_name = r_data[0]["resultSet"]["orderLink"]["orderLinkData"]["schemaDisplayName"]
 
-        result = pd.DataFrame(r_data['resultSet']['result'])
-        result.rename(columns_map, axis='columns', inplace=True)
-        st.write(result)
-    else:
-        schema_display_name = r_data[0]["resultSet"]["orderLink"]["orderLinkData"]["schemaDisplayName"]
+    count = sum(list(map(lambda x: x["resultSet"]["count"], r_data)))
+    execute_time = sum(list(map(lambda x: x["resultSet"]["executeTime"], r_data)))
+    info = f"一共{count}条数据，执行耗时{execute_time}ms. \n{schema_display_name}"
 
-        count = sum(list(map(lambda x: x["resultSet"]["count"], r_data)))
-        execute_time = sum(list(map(lambda x: x["resultSet"]["executeTime"], r_data)))
-        info = f"一共{count}条数据，执行耗时{execute_time}ms. \n{schema_display_name}"
+    result = pd.DataFrame([j for i in list(map(lambda x: x['resultSet']['result'], r_data)) for j in i])
+    columns = r_data[0]['resultSet']['columns']
+    columns_map = dict(map(lambda it: (it['field'], it['realName']), columns))
+    result.rename(columns_map, axis='columns', inplace=True)
 
-        result = pd.DataFrame([j for i in list(map(lambda x: x['resultSet']['result'], r_data)) for j in i])
-        columns = r_data[0]['resultSet']['columns']
-        columns_map = dict(map(lambda it: (it['field'], it['realName']), columns))
-        result.rename(columns_map, axis='columns', inplace=True)
-
-        st.text(info)
-        st.write(result)
+    st.text(info)
+    st.write(result)
 
 
 data = new_ws_data()
