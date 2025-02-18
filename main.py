@@ -11,6 +11,10 @@ cookie = None
 sql = None
 limit_num = None
 
+if 'history_query' not in st.session_state:
+    st.session_state.history_query = []
+history_query = st.session_state.history_query
+
 st.title('DMS SQL Console')
 
 
@@ -69,6 +73,24 @@ class SQL_WARP():
         else:
             return self.sql
 
+class StopWatch():
+    def __init__(self):
+        self.ts = None
+        self.all_cost = 0.0
+        self.last_cost = 0.0
+    
+    def start(self):
+        self.ts = time.time()
+    
+    def stop(self):
+        self.last_cost = (time.time() - self.ts) * 1000
+        self.all_cost += self.last_cost
+        self.ts = None
+    
+    def reset(self):
+        self.all_cost = 0.0
+        self.last_cost = 0.0
+
 @st.cache_data
 def ws_client(c):
     return LongWS(c)
@@ -85,11 +107,12 @@ def new_ws_data():
     lws = ws_client(cookie)
     lws.connect()
     sql_warp = SQL_WARP(sql, limit_num)
+    stop_watch = StopWatch()
 
-    start = time.time()
+    stop_watch.start()
     resp_data = lws.sql_query(sql_warp.pageable_sql(), db_id)['data']
-    end = time.time()
-    print(f"query cost: {(end - start) * 1000} ms, {sql_warp.pageable_sql()}")
+    stop_watch.stop()
+    print(f"query cost: {stop_watch.last_cost} ms, {sql_warp.pageable_sql()}")
 
     all_data = list()
     all_data.append(resp_data)
@@ -101,14 +124,19 @@ def new_ws_data():
     if sql_warp.has_more(): 
         max_row = int(resp_data["resultSet"]["maxRow"])
         while sql_warp.has_more():
-            start = time.time()
+            stop_watch.start()
             other_resp_data = lws.sql_query(sql_warp.pageable_sql(max_row), db_id)['data']
-            end = time.time()
-            print(f"query cost: {(end - start) * 1000} ms, {sql_warp.pageable_sql(max_row)}")
+            stop_watch.stop()
+            print(f"query cost: {stop_watch.last_cost} ms, {sql_warp.pageable_sql(max_row)}")
 
             cnt = int(resp_data["resultSet"]["count"])
             sql_warp.offset_inc(cnt)
             all_data.append(other_resp_data)
+    history_query.append({
+        "sql": sql,
+        "limit_num": sql_warp.limit_num,
+        "cost": stop_watch.all_cost
+    })
     return all_data
 
 
@@ -157,3 +185,9 @@ data = new_ws_data()
 if data is not None and len(data) >= 1:
     st.subheader('Raw data')
     render_data(data)
+
+st.subheader('History Query')
+if len(history_query) > 0:
+    st.table(history_query)
+else:
+    st.write('No history query')
