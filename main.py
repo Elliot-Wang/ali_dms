@@ -156,15 +156,15 @@ def new_ws_data():
 
 with st.sidebar:
     db_id = st.text_input("Db:")
+    # check if db_id is a number
+    if db_id != "" and not db_id.isdigit():
+        st.warning("Db id must be a number!")
+        db_id = None
     cookie = st.text_input("Cookie:")
-    limit_num = st.text_input("Limit:")
-    try:
-        limit_num = int(limit_num)
-    except:
-        limit_num = 0
+    limit_num = st.number_input("Limit:", step=1, format="%d", value=0, min_value=0)
     st.text("希望返回的最大条数(SQL中包含limit则不生效)")
 
-sql = st.text_input("Console:")
+sql = st.text_area("SQL:")
 st.markdown("> 输入多条SQL，也只能执行第一条指令")
 if st.button("Query"):
     if db_id is None or db_id == "":
