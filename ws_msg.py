@@ -131,6 +131,33 @@ class LongWS:
                 return
             time.sleep(0.1)
 
+    def _wait_response(self):
+        """等待并返回 WebSocket 响应"""
+        for i in range(100):  # 10秒超时
+            if self.status == WsStatus.FETCHED:
+                self.status = WsStatus.CONNECTED
+                return self.data
+            time.sleep(0.1)
+        raise Exception("等待响应超时")
+
+    def sql_query(self, sql, db_id):
+        if db_id is None or db_id == '':
+            return
+        if sql is None or sql == '':
+            return
+        if self.status != WsStatus.CONNECTED:
+            return
+        
+        asyncio.run(self._exec_sql(sql, db_id))
+        response = self._wait_response()
+        data = response.get('data', {})
+        
+        if not data.get('success', False):
+            error_message = data.get('resultSet', {}).get('message', '未知错误')
+            raise Exception(f"SQL执行错误: {error_message}")
+            
+        return data
+
 
 def start_background_loop(loop: asyncio.AbstractEventLoop) -> None:
     asyncio.set_event_loop(loop)

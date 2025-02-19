@@ -17,4 +17,4 @@ This project provides a DMS SQL console using Streamlit and websockets to query 
 - Paste them in the Streamlit UI
 
 ## TODO
-- [ ] Catch errors in the websocket and display them in the UI
+- [x] Catch errors in the websocket and display them in the UI

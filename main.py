@@ -117,29 +117,34 @@ def new_ws_data():
     sql_warp = SQL_WARP(sql, limit_num)
     stop_watch = StopWatch()
 
-    stop_watch.start()
-    resp_data = lws.sql_query(sql_warp.pageable_sql(), db_id)['data']
-    stop_watch.stop()
-    print(f"query cost: {stop_watch.last_cost:.2f} ms, {sql_warp.pageable_sql()}")
+    try:
+        stop_watch.start()
+        resp_data = lws.sql_query(sql_warp.pageable_sql(), db_id)
+        stop_watch.stop()
+        print(f"query cost: {stop_watch.last_cost:.2f} ms, {sql_warp.pageable_sql()}")
 
-    all_data = list()
-    all_data.append(resp_data)
+        all_data = list()
+        all_data.append(resp_data)
 
-    cnt = int(resp_data["resultSet"]["count"])
-    sql_warp.offset_inc(cnt)
+        cnt = int(resp_data["resultSet"]["count"])
+        sql_warp.offset_inc(cnt)
 
-    # 每日查询次数又上限，可能就100次
-    if sql_warp.has_more(): 
-        max_row = int(resp_data["resultSet"]["maxRow"])
-        while sql_warp.has_more():
-            stop_watch.start()
-            other_resp_data = lws.sql_query(sql_warp.pageable_sql(max_row), db_id)['data']
-            stop_watch.stop()
-            print(f"query cost: {stop_watch.last_cost:.2f} ms, {sql_warp.pageable_sql(max_row)}")
+        # 每日查询次数又上限，可能就100次
+        if sql_warp.has_more(): 
+            max_row = int(resp_data["resultSet"]["maxRow"])
+            while sql_warp.has_more():
+                stop_watch.start()
+                other_resp_data = lws.sql_query(sql_warp.pageable_sql(max_row), db_id)
+                stop_watch.stop()
+                print(f"query cost: {stop_watch.last_cost:.2f} ms, {sql_warp.pageable_sql(max_row)}")
 
-            cnt = int(resp_data["resultSet"]["count"])
-            sql_warp.offset_inc(cnt)
-            all_data.append(other_resp_data)
+                cnt = int(resp_data["resultSet"]["count"])
+                sql_warp.offset_inc(cnt)
+                all_data.append(other_resp_data)
+    except Exception as e:
+        st.html(f"<p style='color: red;'>{str(e)}</p>")
+        return None
+        
     history_query.append({
         "sql": sql,
         "rows": int(sql_warp.cnt),
