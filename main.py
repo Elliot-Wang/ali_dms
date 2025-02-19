@@ -33,6 +33,9 @@ class SQL_WARP():
         self.page = 1
         self.limit_num = limit_num
         self.pageable = sql.lower().startswith("select") and (limit_num > 0 or sql.lower().find("limit") != -1)
+        # clean ; and space of sql
+        self.sql = self.sql.strip().rstrip(";").strip()
+        # parse limit
         if self.sql.lower().find("limit") != -1:
             # parse sql by regex
             limit_info = re.search(r"limit\s+(\d+),\s+(\d+)", self.sql)
@@ -53,6 +56,7 @@ class SQL_WARP():
         self.cnt = 0
     
     def offset_inc(self, inc):
+        self.inc = inc
         self.offset += inc
         self.cnt += inc
         self.page += 1
@@ -61,6 +65,9 @@ class SQL_WARP():
         if self.pageable:
             if self.page > 10 and self.cnt < self.limit_num:
                 print(f"fuse 10次查询, {self.sql}")
+                return False
+            elif self.inc < 200:
+                # all data has been fetched
                 return False
             return self.cnt < self.limit_num
         else:
@@ -93,6 +100,7 @@ class StopWatch():
 
 @st.cache_data
 def ws_client(c):
+    print("create ws_client")
     return LongWS(c)
 
 
@@ -112,7 +120,7 @@ def new_ws_data():
     stop_watch.start()
     resp_data = lws.sql_query(sql_warp.pageable_sql(), db_id)['data']
     stop_watch.stop()
-    print(f"query cost: {stop_watch.last_cost} ms, {sql_warp.pageable_sql()}")
+    print(f"query cost: {stop_watch.last_cost:.2f} ms, {sql_warp.pageable_sql()}")
 
     all_data = list()
     all_data.append(resp_data)
@@ -127,13 +135,14 @@ def new_ws_data():
             stop_watch.start()
             other_resp_data = lws.sql_query(sql_warp.pageable_sql(max_row), db_id)['data']
             stop_watch.stop()
-            print(f"query cost: {stop_watch.last_cost} ms, {sql_warp.pageable_sql(max_row)}")
+            print(f"query cost: {stop_watch.last_cost:.2f} ms, {sql_warp.pageable_sql(max_row)}")
 
             cnt = int(resp_data["resultSet"]["count"])
             sql_warp.offset_inc(cnt)
             all_data.append(other_resp_data)
     history_query.append({
         "sql": sql,
+        "rows": int(sql_warp.cnt),
         "limit_num": sql_warp.limit_num,
         "cost": stop_watch.all_cost
     })
