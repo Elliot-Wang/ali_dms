@@ -180,24 +180,52 @@ def render_data(r_data):
     if len(r_data) < 1:
         return
 
+    
     schema_display_name = r_data[0]["resultSet"]["orderLink"]["orderLinkData"]["schemaDisplayName"]
+    table_name = r_data[0]["resultSet"]["tables"][0]["tableName"]
 
     count = sum(list(map(lambda x: x["resultSet"]["count"], r_data)))
     execute_time = sum(list(map(lambda x: x["resultSet"]["executeTime"], r_data)))
+    # 计算执行耗时 查询基本信息
     info = f"一共{count}条数据，执行耗时{execute_time}ms. \n{schema_display_name}"
+    st.text(info)
+
+    # 选择数据展示方式
+    display_type = st.radio(
+        "选择展示方式:",
+        ["DataFrame表格", "JSON格式", "SQL语句"],
+        horizontal=True
+    )
 
     result = pd.DataFrame([j for i in list(map(lambda x: x['resultSet']['result'], r_data)) for j in i])
     columns = r_data[0]['resultSet']['columns']
     columns_map = dict(map(lambda it: (it['field'], it['realName']), columns))
     result.rename(columns_map, axis='columns', inplace=True)
 
-    st.text(info)
-    st.write(result)
+    # 展示数据
+    if display_type == "DataFrame表格":
+        st.write(result)
+    elif display_type == "JSON格式":
+        st.json(result.to_dict(orient="records"))
+    else:
+        # 生成插入SQL
+        insert_sql = ""
+        for i in range(result.shape[0]):
+            values = result.iloc[i]
+            
+            insert_sql += f"INSERT INTO {table_name} ("
+            insert_sql += ", ".join([col['realName'] for col in columns])
+            insert_sql += ") VALUES ("
+            insert_sql += ", ".join([f"'{str(val)}'" if isinstance(val, str) else str(val) for val in values])
+            insert_sql += ");"
+            insert_sql += "\n"
+        st.code(insert_sql, language="sql", line_numbers=True)
 
 
 data = new_ws_data()
 if data is not None and len(data) >= 1:
     st.subheader('Raw data')
+
     render_data(data)
 
 st.subheader('History Query')
